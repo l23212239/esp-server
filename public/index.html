@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Control Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #0a0c0f;
+            --bg2:       #11151a;
+            --bg3:       #181e25;
+            --border:    #1e2730;
+            --accent:    #00e5ff;
+            --accent2:   #ff6b35;
+            --green:     #39ff14;
+            --red:       #ff2d55;
+            --text:      #c8d8e8;
+            --muted:     #4a5a6a;
+            --mono:      'Share Tech Mono', monospace;
+            --sans:      'Rajdhani', sans-serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            padding: 32px 24px 48px;
+            overflow-x: hidden;
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.35;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            max-width: 1080px;
+            margin: 0 auto;
+        }
+
+        /* ── Header ── */
+        header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+            margin-bottom: 36px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .header-left .label {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--accent);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #fff;
+            line-height: 1;
+        }
+
+        /* Contenedor derecho para botón y status */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 2px;
+            transition: color .3s, border-color .3s;
+        }
+
+        .status-pill.online  { color: var(--green); border-color: var(--green); }
+        .status-pill.offline { color: var(--red);   border-color: var(--red); }
+
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .status-pill.online  .status-dot { animation: blink 1.4s ease-in-out infinite; }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: .25; }
+        }
+
+        /* ── Mic Button (NUEVO) ── */
+        .btn-mic {
+            background: rgba(0, 229, 255, 0.08);
+            color: var(--accent);
+            border-color: rgba(0, 229, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 8px 16px;
+            border-style: solid;
+            border-width: 1px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-mic:hover {
+            background: rgba(0, 229, 255, 0.15);
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+
+        .btn-mic.listening {
+            animation: pulse-mic 1.5s infinite;
+            background: rgba(255, 45, 85, 0.15);
+            color: var(--red);
+            border-color: var(--red);
+        }
+
+        @keyframes pulse-mic {
+            0% { box-shadow: 0 0 0 0 rgba(255, 45, 85, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 45, 85, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 45, 85, 0); }
+        }
+
+        /* ── Grid layout ── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card-wide { grid-column: 1 / -1; }
+
+        /* ── Card ── */
+        .card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color .2s;
+        }
+
+        .card:hover { border-color: #2e3d4d; }
+
+        .card::before, .card::after {
+            content: '';
+            position: absolute;
+            width: 10px; height: 10px;
+            border-color: var(--accent);
+            border-style: solid;
+            opacity: 0.4;
+        }
+        .card::before { top: 0; left: 0;  border-width: 1px 0 0 1px; }
+        .card::after  { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 22px;
+        }
+
+        .card-icon {
+            width: 32px; height: 32px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+
+        .card-sub {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .big-value {
+            font-family: var(--mono);
+            font-size: 64px;
+            line-height: 1;
+            color: var(--accent);
+            margin-bottom: 8px;
+            transition: color .3s;
+        }
+
+        .big-unit {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--muted);
+            letter-spacing: 2px;
+        }
+
+        .sparkline-wrap {
+            margin-top: 18px;
+            height: 48px;
+            position: relative;
+        }
+
+        #ldr-sparkline {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ── LED buttons ── */
+        .btn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .btn {
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 14px 10px;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all .15s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            transition: opacity .1s;
+        }
+
+        .btn:active::after { opacity: .06; }
+
+        .btn-on {
+            background: rgba(57, 255, 20, .08);
+            color: var(--green);
+            border-color: rgba(57, 255, 20, .3);
+        }
+
+        .btn-on:hover {
+            background: rgba(57, 255, 20, .16);
+            border-color: var(--green);
+            box-shadow: 0 0 12px rgba(57, 255, 20, .2);
+        }
+
+        .btn-off {
+            background: rgba(255, 45, 85, .08);
+            color: var(--red);
+            border-color: rgba(255, 45, 85, .3);
+        }
+
+        .btn-off:hover {
+            background: rgba(255, 45, 85, .16);
+            border-color: var(--red);
+            box-shadow: 0 0 12px rgba(255, 45, 85, .2);
+        }
+
+        /* LED indicator */
+        .led-indicator {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--muted);
+            margin-left: auto;
+            flex-shrink: 0;
+            transition: background .3s, box-shadow .3s;
+        }
+
+        .led-indicator.on-green {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green), 0 0 20px rgba(57,255,20,.3);
+        }
+
+        .led-indicator.on-blue {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent), 0 0 20px rgba(0,229,255,.3);
+        }
+
+        /* ── Potenciómetro ── */
+        .pot-layout {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 24px;
+            align-items: center;
+        }
+
+        @media (max-width: 560px) {
+            .pot-layout { grid-template-columns: 1fr; }
+        }
+
+        /* Arc gauge */
+        .gauge-wrap {
+            position: relative;
+            width: 160px; height: 140px;
+            flex-shrink: 0;
+            margin: 0 auto;
+        }
+
+        #gauge-svg { width: 100%; height: 100%; }
+
+        .gauge-center-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-top: 16px;
+        }
+
+        .gauge-pct {
+            font-family: var(--mono);
+            font-size: 28px;
+            color: #fff;
+            line-height: 1;
+        }
+
+        .gauge-label {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        /* Horizontal bar */
+        .pot-bar-wrap {
+            flex: 1;
+        }
+
+        .pot-bar-labels {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .pot-bar-track {
+            height: 8px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pot-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 2px;
+            width: 0%;
+            transition: width .18s ease;
+            position: relative;
+        }
+
+        .pot-bar-fill::after {
+            content: '';
+            position: absolute;
+            right: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: white;
+            opacity: .6;
+            box-shadow: 0 0 6px white;
+        }
+
+        .pot-raw {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 10px;
+        }
+
+        .pot-raw span {
+            color: var(--accent2);
+        }
+
+        /* History graph */
+        .pot-history {
+            margin-top: 16px;
+            height: 56px;
+            position: relative;
+        }
+
+        #pot-sparkline {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ── Device status row ── */
+        .device-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .device-badge {
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 5px 12px;
+            border-radius: 2px;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            transition: all .3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .device-badge.online  { color: var(--green); border-color: rgba(57,255,20,.3); background: rgba(57,255,20,.05); }
+        .device-badge.offline { color: var(--red);   border-color: rgba(255,45,85,.3);  background: rgba(255,45,85,.05); }
+        .device-badge .dot    { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+        /* Timestamp */
+        .ts {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 14px;
+        }
+
+        /* Toast notification */
+        #toast {
+            position: fixed;
+            bottom: 28px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--bg3);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 12px;
+            padding: 10px 20px;
+            border-radius: 2px;
+            opacity: 0;
+            transition: transform .3s ease, opacity .3s ease;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <header>
+        <div class="header-left">
+            <div class="label">// Sistema de monitoreo</div>
+            <h1>ESP32 Control Panel</h1>
+        </div>
+        <div class="header-right">
+            <button id="btn-mic" class="btn-mic">🎤 Voz</button>
+            
+            <div class="status-pill" id="status-pill">
+                <div class="status-dot"></div>
+                <span id="status-text">Conectando...</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="device-row">
+        <div class="device-badge" id="badge-arduino">
+            <span class="dot"></span>WEMOS LOLIN32 LITE
+        </div>
+        <div class="device-badge" id="badge-pot">
+            <span class="dot"></span>ESP32 STEREN · POT
+        </div>
+    </div>
+
+    <div class="grid">
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">☀</div>
+                <div>
+                    <div class="card-title">Sensor LDR</div>
+                    <div class="card-sub">GPIO34 · Wemos</div>
+                </div>
+            </div>
+            <div class="big-value" id="ldr-valor">0</div>
+            <div class="big-unit">RAW 12-BIT</div>
+            <div class="sparkline-wrap">
+                <svg id="ldr-sparkline"></svg>
+            </div>
+            <div class="ts" id="ldr-ts">—</div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">◉</div>
+                <div>
+                    <div class="card-title">LED Externo</div>
+                    <div class="card-sub">GPIO25 · Wemos</div>
+                </div>
+                <div class="led-indicator" id="ind-ext"></div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-on"  onclick="cmd('led_on')">Encender</button>
+                <button class="btn btn-off" onclick="cmd('led_off')">Apagar</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">◎</div>
+                <div>
+                    <div class="card-title">LED Interno</div>
+                    <div class="card-sub">GPIO22 · Wemos</div>
+                </div>
+                <div class="led-indicator" id="ind-int"></div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-on"  onclick="cmd('led_int_on')">Encender</button>
+                <button class="btn btn-off" onclick="cmd('led_int_off')">Apagar</button>
+            </div>
+        </div>
+
+        <div class="card card-wide">
+            <div class="card-header">
+                <div class="card-icon">◈</div>
+                <div>
+                    <div class="card-title">Potenciómetro</div>
+                    <div class="card-sub">GPIO34 · ESP32 Steren</div>
+                </div>
+            </div>
+            <div class="pot-layout">
+                <div class="pot-bar-wrap">
+                    <div class="pot-bar-labels">
+                        <span>0%</span>
+                        <span>25%</span>
+                        <span>50%</span>
+                        <span>75%</span>
+                        <span>100%</span>
+                    </div>
+                    <div class="pot-bar-track">
+                        <div class="pot-bar-fill" id="pot-bar"></div>
+                    </div>
+                    <div class="pot-raw">RAW: <span id="pot-raw">0</span> / 4095</div>
+                    <div class="pot-history">
+                        <svg id="pot-sparkline"></svg>
+                    </div>
+                    <div class="ts" id="pot-ts">—</div>
+                </div>
+                <div class="gauge-wrap">
+                    <svg id="gauge-svg" viewBox="0 0 160 140" xmlns="http://www.w3.org/2000/svg">
+                        <path id="gauge-track" d="" fill="none" stroke="#1e2730" stroke-width="10" stroke-linecap="round"/>
+                        <path id="gauge-fill"  d="" fill="none" stroke="url(#gaugeGrad)" stroke-width="10" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%"   stop-color="#00e5ff"/>
+                                <stop offset="100%" stop-color="#ff6b35"/>
+                            </linearGradient>
+                        </defs>
+                        <g id="gauge-ticks" stroke="#1e2730" stroke-width="1.5"></g>
+                    </svg>
+                    <div class="gauge-center-text">
+                        <div class="gauge-pct" id="gauge-pct">0%</div>
+                        <div class="gauge-label">NIVEL</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div></div><div id="toast"></div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+// ── Socket.IO ──────────────────────────────────────────────
+const socket = io();
+
+const statusPill = document.getElementById('status-pill');
+const statusText = document.getElementById('status-text');
+
+socket.on('connect', () => {
+    statusPill.className = 'status-pill online';
+    statusText.textContent = 'Conectado';
+    socket.emit('identificar', 'cliente_web');
+});
+
+socket.on('disconnect', () => {
+    statusPill.className = 'status-pill offline';
+    statusText.textContent = 'Desconectado';
+});
+
+// Estado de los ESP32
+socket.on('estado_arduino', d => setDeviceBadge('badge-arduino', d.conectado));
+socket.on('estado_esp32_pot', d => setDeviceBadge('badge-pot', d.conectado));
+
+function setDeviceBadge(id, online) {
+    const el = document.getElementById(id);
+    el.className = 'device-badge ' + (online ? 'online' : 'offline');
+}
+
+// ── LDR ───────────────────────────────────────────────────
+const ldrHistory = [];
+socket.on('arduino', data => {
+    if (data.ldr === undefined) return;
+    const v = data.ldr;
+    document.getElementById('ldr-valor').textContent = v;
+    document.getElementById('ldr-ts').textContent = 'Última lectura: ' + timestamp();
+
+    ldrHistory.push(v);
+    if (ldrHistory.length > 60) ldrHistory.shift();
+    drawSparkline('ldr-sparkline', ldrHistory, '#00e5ff');
+});
+
+// ── LED indicators ────────────────────────────────────────
+function cmd(c) {
+    socket.emit('comando', c);
+    if (c === 'led_on')      setLed('ind-ext', 'on-green');
+    if (c === 'led_off')     setLed('ind-ext', '');
+    if (c === 'led_int_on')  setLed('ind-int', 'on-blue');
+    if (c === 'led_int_off') setLed('ind-int', '');
+    showToast('CMD: ' + c);
+}
+
+function setLed(id, cls) {
+    document.getElementById(id).className = 'led-indicator ' + cls;
+}
+
+// ── Control por Voz (Web Speech API) NUEVO ────────────────
+const btnMic = document.getElementById('btn-mic');
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-MX'; // Español
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+        btnMic.classList.add('listening');
+        btnMic.innerHTML = '🔴 Escuchando...';
+        showToast('Habla ahora...');
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.toLowerCase();
+        showToast('🗣️ ' + transcript);
+
+        // Retraso ligero para que el usuario lea lo detectado
+        setTimeout(() => {
+            if (transcript.includes('encender') && transcript.includes('externo')) {
+                cmd('led_on');
+            } else if (transcript.includes('apagar') && transcript.includes('externo')) {
+                cmd('led_off');
+            } else if (transcript.includes('encender') && transcript.includes('interno')) {
+                cmd('led_int_on');
+            } else if (transcript.includes('apagar') && transcript.includes('interno')) {
+                cmd('led_int_off');
+            } else {
+                showToast('⚠️ Comando no reconocido');
+            }
+        }, 1200);
+    };
+
+    recognition.onerror = (event) => {
+        showToast('Error de micrófono: ' + event.error);
+        resetMic();
+    };
+
+    recognition.onend = () => {
+        resetMic();
+    };
+
+    btnMic.addEventListener('click', () => {
+        try {
+            recognition.start();
+        } catch(e) {}
+    });
+
+    function resetMic() {
+        btnMic.classList.remove('listening');
+        btnMic.innerHTML = '🎤 Voz';
+    }
+} else {
+    btnMic.style.display = 'none';
+    console.warn("API de reconocimiento de voz no soportada.");
+}
+
+// ── Potenciómetro ─────────────────────────────────────────
+const potHistory = [];
+socket.on('potenciometro', data => {
+    const pct = data.porcentaje ?? 0;
+    const raw = data.raw ?? 0;
+
+    document.getElementById('pot-bar').style.width = pct + '%';
+    document.getElementById('pot-raw').textContent = raw;
+    document.getElementById('gauge-pct').textContent = pct + '%';
+    document.getElementById('pot-ts').textContent = 'Última lectura: ' + timestamp();
+    updateGauge(pct);
+
+    potHistory.push(pct);
+    if (potHistory.length > 80) potHistory.shift();
+    drawSparkline('pot-sparkline', potHistory, '#ff6b35');
+});
+
+// ── Gauge arc ─────────────────────────────────────────────
+const CX = 80, CY = 90, R = 56;
+const START_DEG = 210, END_DEG = 330; // total sweep = 300°
+
+function degToRad(d) { return d * Math.PI / 180; }
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+    const s = degToRad(startDeg);
+    const e = degToRad(endDeg);
+    const x1 = cx + r * Math.cos(s), y1 = cy + r * Math.sin(s);
+    const x2 = cx + r * Math.cos(e), y2 = cy + r * Math.sin(e);
+    const large = (endDeg - startDeg) > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+}
+
+// Draw static track and ticks once
+(function initGauge() {
+    document.getElementById('gauge-track').setAttribute('d', arcPath(CX, CY, R, START_DEG, START_DEG + 300));
+    const ticksG = document.getElementById('gauge-ticks');
+    for (let i = 0; i <= 10; i++) {
+        const deg = START_DEG + (300 * i / 10);
+        const rad = degToRad(deg);
+        const inner = i % 5 === 0 ? R - 9 : R - 5;
+        const outer = R + 3;
+        const x1 = CX + inner * Math.cos(rad), y1 = CY + inner * Math.sin(rad);
+        const x2 = CX + outer * Math.cos(rad), y2 = CY + outer * Math.sin(rad);
+        const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        tick.setAttribute('x1', x1); tick.setAttribute('y1', y1);
+        tick.setAttribute('x2', x2); tick.setAttribute('y2', y2);
+        if (i % 5 === 0) tick.setAttribute('stroke', '#2e3d4d');
+        ticksG.appendChild(tick);
+    }
+})();
+
+function updateGauge(pct) {
+    const sweep = 300 * pct / 100;
+    if (sweep < 1) {
+        document.getElementById('gauge-fill').setAttribute('d', '');
+        return;
+    }
+    document.getElementById('gauge-fill').setAttribute('d',
+        arcPath(CX, CY, R, START_DEG, START_DEG + sweep));
+}
+
+// ── Sparkline ─────────────────────────────────────────────
+function drawSparkline(id, data, color) {
+    const svg = document.getElementById(id);
+    if (!svg || data.length < 2) return;
+    const W = svg.clientWidth  || svg.parentElement.offsetWidth || 200;
+    const H = svg.clientHeight || 48;
+    const min = Math.min(...data), max = Math.max(...data);
+    const range = max - min || 1;
+    const pts = data.map((v, i) => {
+        const x = (i / (data.length - 1)) * W;
+        const y = H - ((v - min) / range) * (H - 6) - 3;
+        return `${x},${y}`;
+    });
+    svg.innerHTML = `
+        <defs>
+            <linearGradient id="sg-${id}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+            </linearGradient>
+        </defs>
+        <polyline points="${pts.join(' ')}"
+            fill="none" stroke="${color}" stroke-width="1.5"
+            stroke-linejoin="round" stroke-linecap="round"/>
+        <polygon points="${pts.join(' ')} ${W},${H} 0,${H}"
+            fill="url(#sg-${id})"/>
+    `;
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function timestamp() {
+    return new Date().toLocaleTimeString('es-MX', { hour12: false });
+}
+
+let toastTimer;
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+</script>
+</body>
+</html>
