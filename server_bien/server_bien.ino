@@ -1,7 +1,7 @@
-#include <WiFi.h>
-#include <ArduinoJson.h>
-#include <WebSocketsClient.h>
-#include <SocketIOclient.h>
+//#include <WiFi.h>
+//#include <ArduinoJson.h>
+//#include <WebSocketsClient.h>
+//#include <SocketIOclient.h>
 
 // --- CONFIGURACIÓN DE RED Y SERVIDOR ---
 const char* ssid = "nombre_WiFi";
