@@ -70,6 +70,7 @@ io.on('connection', function(socket) {
     });
 });
 
+
 server.listen(3000, '0.0.0.0', function() {
     console.log('Servidor corriendo en puerto 3000');
 });

@@ -676,60 +676,114 @@ function setLed(id, cls) {
 }
 
 // ── Control por Voz (Web Speech API) NUEVO ────────────────
-const btnMic = document.getElementById('btn-mic');
+const WAKE_WORD = 'morenito'; // ← cambia al nombre que quieras
+
+const btnMic    = document.getElementById('btn-mic');
+const synth     = window.speechSynthesis;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function speak(text) {
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang  = 'es-MX';
+    utter.rate  = 1.0;
+    utter.pitch = 1.1;
+    const voices = synth.getVoices();
+    const voice  = voices.find(v => v.lang.startsWith('es')) || voices[0];
+    if (voice) utter.voice = voice;
+    synth.speak(utter);
+}
 
 if (SpeechRecognition) {
     const recognition = new SpeechRecognition();
-    recognition.lang = 'es-MX'; // Español
-    recognition.continuous = false;
+    recognition.lang           = 'es-MX';
+    recognition.continuous     = true;   // ← escucha permanente
     recognition.interimResults = false;
 
+    let awake     = false;
+    let wakeTimer = null;
+
     recognition.onstart = () => {
-        btnMic.classList.add('listening');
-        btnMic.innerHTML = '🔴 Escuchando...';
-        showToast('Habla ahora...');
+        showToast('💤 Esperando: "' + WAKE_WORD + '"');
     };
 
     recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.toLowerCase();
+        const transcript = event.results[event.results.length - 1][0]
+                               .transcript.toLowerCase().trim();
         showToast('🗣️ ' + transcript);
 
-        // Retraso ligero para que el usuario lea lo detectado
-        setTimeout(() => {
+        if (!awake) {
+            // ── Modo espera: solo detecta el wake word ──
+            if (transcript.includes(WAKE_WORD)) {
+                awake = true;
+                btnMic.classList.add('listening');
+                btnMic.innerHTML = '🔴 Escuchando...';
+                speak('Dime');
+
+                clearTimeout(wakeTimer);
+                wakeTimer = setTimeout(() => {
+                    awake = false;
+                    resetMic();
+                    speak('De acuerdo');
+                }, 8000); // 8 segundos para dar el comando
+            }
+        } else {
+            // ── Modo activo: procesar comando ──
+            clearTimeout(wakeTimer);
+            awake = false;
+            resetMic();
+
             if (transcript.includes('encender') && transcript.includes('externo')) {
                 cmd('led_on');
+                speak('Encendiendo LED externo');
             } else if (transcript.includes('apagar') && transcript.includes('externo')) {
                 cmd('led_off');
+                speak('Apagando LED externo');
             } else if (transcript.includes('encender') && transcript.includes('interno')) {
                 cmd('led_int_on');
+                speak('Encendiendo LED interno');
             } else if (transcript.includes('apagar') && transcript.includes('interno')) {
                 cmd('led_int_off');
+                speak('Apagando LED interno');
             } else {
+                speak('No entendí ese comando');
                 showToast('⚠️ Comando no reconocido');
             }
-        }, 1200);
+        }
     };
 
     recognition.onerror = (event) => {
         showToast('Error de micrófono: ' + event.error);
         resetMic();
+        awake = false;
     };
 
     recognition.onend = () => {
-        resetMic();
+        // reinicio automático para mantener escucha continua
+        if (btnMic.dataset.active === 'true') {
+            try { recognition.start(); } catch(e) {}
+        }
     };
 
     btnMic.addEventListener('click', () => {
-        try {
-            recognition.start();
-        } catch(e) {}
+        if (btnMic.dataset.active === 'true') {
+            // Detener
+            btnMic.dataset.active = 'false';
+            recognition.stop();
+            resetMic();
+            awake = false;
+        } else {
+            // Iniciar
+            btnMic.dataset.active = 'true';
+            try { recognition.start(); } catch(e) {}
+        }
     });
 
     function resetMic() {
         btnMic.classList.remove('listening');
         btnMic.innerHTML = '🎤 Voz';
     }
+
 } else {
     btnMic.style.display = 'none';
     console.warn("API de reconocimiento de voz no soportada.");
@@ -837,6 +891,8 @@ function showToast(msg) {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
 }
+
+
 </script>
 </body>
 </html>
